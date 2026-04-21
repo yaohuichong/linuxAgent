@@ -28,6 +28,7 @@ class LinuxAgent:
 14. network_info - 查看网络信息
 15. system_status - 系统整体状态
 16. shell [command] - 执行任意shell命令
+17. chat [message] - 回答用户问题或解释概念（当用户只是提问、追问或需要解释时使用）
 
 ## 响应格式
 分析用户输入后，返回JSON：
@@ -42,6 +43,7 @@ class LinuxAgent:
 
 ## 重要规则
 - 总是返回JSON格式
+- 如果用户只是在提问、追问或需要解释，使用chat工具
 - 如果用户请求不明确，选择最合适的工具
 - 文件写入操作需要用户确认
 - 危险命令(rm -rf /等)标记为critical
@@ -52,7 +54,8 @@ class LinuxAgent:
 用户: "查看磁盘" -> {"tool": "disk_info", "args": {}, "explanation": "查看磁盘使用情况", "risk_level": "low"}
 用户: "列出桌面的文件" -> {"tool": "file_list", "args": {"path": "$HOME/桌面"}, "explanation": "列出桌面目录内容", "risk_level": "low"}
 用户: "写一首诗保存到桌面" -> {"tool": "file_write", "args": {"path": "$HOME/桌面/poem.txt", "content": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。"}, "explanation": "创建诗歌文件", "risk_level": "low"}
-用户: "只显示文件名" -> {"tool": "shell", "args": {"command": "ls -1"}, "explanation": "仅列出文件名", "risk_level": "low"}"""
+用户: "只显示文件名" -> {"tool": "shell", "args": {"command": "ls -1"}, "explanation": "仅列出文件名", "risk_level": "low"}
+用户: "代表什么意思" -> {"tool": "chat", "args": {"message": "详细解释之前输出结果的含义..."}, "explanation": "解释网络配置信息", "risk_level": "low"}"""
 
     def __init__(self, api_key: str = "", api_base: str = "", model: str = "",
                  ssh_config: Dict[str, Any] = None, risk_level: str = "high"):
@@ -224,6 +227,10 @@ class LinuxAgent:
             elif tool == "system_status":
                 output = self.tools.get_system_status()
                 return output, True
+                
+            elif tool == "chat":
+                message = args.get("message", "")
+                return message, True
                 
             elif tool == "shell":
                 command = args.get("command", "")
