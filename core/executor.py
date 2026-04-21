@@ -263,6 +263,11 @@ class ExecutorManager:
     def is_connected(self) -> bool:
         return self.executor is not None
         
+    def get_username(self) -> str:
+        if isinstance(self.executor, RemoteExecutor):
+            return self.executor.username
+        return ""
+        
     def disconnect(self):
         if isinstance(self.executor, RemoteExecutor):
             self.executor.disconnect()
