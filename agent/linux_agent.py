@@ -46,11 +46,12 @@ class LinuxAgent:
 - 文件写入操作需要用户确认
 - 危险命令(rm -rf /等)标记为critical
 - 用中文回复用户
+- 路径使用$HOME变量，例如：$HOME/桌面、$HOME/文档
 
 ## 示例
 用户: "查看磁盘" -> {"tool": "disk_info", "args": {}, "explanation": "查看磁盘使用情况", "risk_level": "low"}
-用户: "列出桌面的文件" -> {"tool": "file_list", "args": {"path": "~/桌面"}, "explanation": "列出桌面目录内容", "risk_level": "low"}
-用户: "写一首诗保存到桌面" -> {"tool": "file_write", "args": {"path": "~/桌面/poem.txt", "content": "春眠不觉晓..."}, "explanation": "创建诗歌文件", "risk_level": "low"}
+用户: "列出桌面的文件" -> {"tool": "file_list", "args": {"path": "$HOME/桌面"}, "explanation": "列出桌面目录内容", "risk_level": "low"}
+用户: "写一首诗保存到桌面" -> {"tool": "file_write", "args": {"path": "$HOME/桌面/poem.txt", "content": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。"}, "explanation": "创建诗歌文件", "risk_level": "low"}
 用户: "只显示文件名" -> {"tool": "shell", "args": {"command": "ls -1"}, "explanation": "仅列出文件名", "risk_level": "low"}"""
 
     def __init__(self, api_key: str = "", api_base: str = "", model: str = "",
@@ -154,11 +155,11 @@ class LinuxAgent:
                 
             elif tool == "file_write":
                 path = self._expand_path(args.get("path", ""))
-                content = args.get("content", "")
+                content = args.get("content", "").replace("'", "'\"'\"'")
                 risk, warning = self.security.analyze_command(f"write {path}")
                 if risk in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
                     return f"⚠️ 安全警告: {warning}", False
-                success, output = self.tools.execute_custom_command(f"echo '{content}' > {path}")
+                success, output = self.tools.execute_custom_command(f'echo \'{content}\' | tee {path}')
                 if success:
                     return f"✅ 文件已保存到 {path}", True
                 return f"写入失败: {output}", False
@@ -239,12 +240,8 @@ class LinuxAgent:
             return f"执行错误: {str(e)}", False
             
     def _expand_path(self, path: str) -> str:
-        if path.startswith("~"):
-            username = self.executor.get_username()
-            if username:
-                path = f"/home/{username}" + path[1:]
-            else:
-                path = path.replace("~", "$HOME")
+        if path.startswith("~") or "$HOME" in path:
+            pass
         return path
         
     def process_user_input(self, user_input: str) -> str:
