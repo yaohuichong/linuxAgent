@@ -2,6 +2,7 @@ from openai import OpenAI
 from typing import Optional, List, Dict, Any
 import json
 import os
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -44,15 +45,46 @@ class LLMClient:
                 model=self.model,
                 messages=self.conversation_history,
                 temperature=0.1,
-                max_tokens=2000,
-                response_format={"type": "json_object"}
+                max_tokens=2000
             )
             
             assistant_message = response.choices[0].message.content
             self.conversation_history.append({"role": "assistant", "content": assistant_message})
-            return json.loads(assistant_message)
+            
+            return self._extract_json(assistant_message)
         except Exception as e:
             print(f"Error in JSON response: {str(e)}")
+            return None
+            
+    def _extract_json(self, text: str) -> Optional[Dict[str, Any]]:
+        json_block_pattern = r'```json\s*([\s\S]*?)\s*```'
+        matches = re.findall(json_block_pattern, text)
+        
+        for match in matches:
+            try:
+                return json.loads(match)
+            except:
+                continue
+        
+        brace_start = text.find('{')
+        if brace_start != -1:
+            brace_count = 0
+            for i in range(brace_start, len(text)):
+                char = text[i]
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        json_str = text[brace_start:i+1]
+                        try:
+                            return json.loads(json_str)
+                        except:
+                            break
+        
+        try:
+            return json.loads(text.strip())
+        except:
             return None
             
     def clear_history(self):
