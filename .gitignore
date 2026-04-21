@@ -25,3 +25,6 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+
+agent/__pycache__/linux_agent.cpython-310.pyc
+tools/__pycache__/system_tools.cpython-310.pyc
