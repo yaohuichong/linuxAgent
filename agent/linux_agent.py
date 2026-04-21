@@ -168,10 +168,14 @@ class LinuxAgent:
                 filter_name = args.get("filter", "")
                 if filter_name:
                     processes = self.tools.get_process_list(filter_name)
+                    if processes and "error" in processes[0]:
+                        return f"查询进程失败: {processes[0].get('error', '未知错误')}", False
+                    if not processes:
+                        return f"没有找到匹配 '{filter_name}' 的进程", True
                 else:
                     processes = self.tools.get_process_list()
-                if not processes or "error" in processes[0]:
-                    return "无法获取进程信息", False
+                    if not processes or "error" in processes[0]:
+                        return "无法获取进程信息", False
                 output = "进程列表:\n"
                 for p in processes[:15]:
                     output += f"  PID:{p.get('pid',''):>6} CPU:{p.get('cpu',''):>5}% MEM:{p.get('mem',''):>5}% {p.get('command','')[:40]}\n"

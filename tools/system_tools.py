@@ -105,7 +105,7 @@ class SystemTools:
             
         result = self.executor.execute(cmd)
         if not result.success:
-            return [{"error": result.stderr}]
+            return []
             
         processes = []
         lines = result.stdout.strip().split("\n")
