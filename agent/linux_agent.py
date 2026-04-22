@@ -115,17 +115,29 @@ class LinuxAgent:
                 context_info += f"{role}: {content}\n"
             
         prompt = f"{context_info}\n当前用户输入: {user_input}\n\n请分析意图并返回JSON格式的执行计划。"
-        response = self.llm_client.chat_with_json_response(prompt)
         
-        if not response:
-            return "无法理解您的请求，请换种方式描述", False, ""
+        for attempt in range(3):
+            response = self.llm_client.chat_with_json_response(prompt)
             
-        tool = response.get("tool", "")
-        args = response.get("args", {})
-        explanation = response.get("explanation", "")
-        risk_level = response.get("risk_level", "low")
-        
-        return self._execute_tool(tool, args, explanation, risk_level)
+            if not response:
+                return "无法理解您的请求，请换种方式描述", False, ""
+                
+            tool = response.get("tool", "")
+            args = response.get("args", {})
+            explanation = response.get("explanation", "")
+            risk_level = response.get("risk_level", "low")
+            
+            result, success, executed_tool = self._execute_tool(tool, args, explanation, risk_level)
+            
+            if success:
+                return result, True, executed_tool
+                
+            if attempt < 2:
+                prompt = f"{context_info}\n当前用户输入: {user_input}\n\n上一次执行失败:\n工具: {tool}\n错误: {result}\n\n请尝试其他方法，返回JSON格式的执行计划。"
+            else:
+                return result, False, executed_tool
+                
+        return "执行失败，已尝试多种方法", False, ""
         
     def _execute_tool(self, tool: str, args: Dict[str, Any], explanation: str, risk_level: str) -> Tuple[str, bool, str]:
         if not self.tools:
