@@ -240,8 +240,8 @@ class LinuxAgent:
                 return output, True, tool
                 
             elif tool == "cpu_info":
-                output = self.tools.get_cpu_info()
-                return output, True, tool
+                success, output = self.tools.get_cpu_info()
+                return output, success, tool
                 
             elif tool == "network_info":
                 output = self.tools.get_network_info()
@@ -278,20 +278,14 @@ class LinuxAgent:
             return result
             
         explain_prompt = f"""用户请求: {user_input}
-执行工具: {tool}
-原始输出:
+执行结果:
 {result}
 
-请用简洁友好的中文回复，包括：
-1. 简要说明执行了什么操作
-2. 解释输出结果的关键信息（如果输出较长，只解释重要部分）
-3. 如果发现问题或建议，可以提示用户
-
-直接返回解释内容，不要JSON格式。"""
+请用简洁友好的中文解释这个结果。直接输出解释文本，不要任何代码块或JSON。"""
         
         try:
             explanation = self.llm_client.chat(explain_prompt)
-            if explanation:
+            if explanation and not explanation.strip().startswith("{"):
                 return explanation
         except:
             pass

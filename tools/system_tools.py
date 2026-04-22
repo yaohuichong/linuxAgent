@@ -257,11 +257,11 @@ class SystemTools:
             output += f"  {line}\n"
         return output.strip()
         
-    def get_cpu_info(self) -> str:
-        result = self.executor.execute("lscpu | grep -E '^(Model name|CPU\\(s\\)|CPU MHz|CPU max)'")
-        if not result.success:
-            return f"无法获取CPU信息: {result.stderr}"
-        return f"CPU信息:\n{result.stdout.strip()}"
+    def get_cpu_info(self) -> Tuple[bool, str]:
+        result = self.executor.execute("lscpu 2>/dev/null || cat /proc/cpuinfo | grep 'model name' | head -1")
+        if not result.success or not result.stdout.strip():
+            return False, "无法获取CPU信息"
+        return True, f"CPU信息:\n{result.stdout.strip()}"
         
     def get_network_info(self) -> str:
         result = self.executor.execute("ip addr show | grep -E 'inet |link/ether'")
