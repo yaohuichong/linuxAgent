@@ -43,6 +43,8 @@ class LinuxAgent:
 
 ## 重要规则
 - 总是返回JSON格式
+- 结合对话上下文理解用户意图
+- 如果用户追问"这是什么意思"、"代表什么"等，使用chat工具并结合上下文详细解释
 - 如果用户只是在提问、追问或需要解释，使用chat工具
 - 如果用户请求不明确，选择最合适的工具
 - 文件写入操作需要用户确认
@@ -55,7 +57,7 @@ class LinuxAgent:
 用户: "列出桌面的文件" -> {"tool": "file_list", "args": {"path": "$HOME/桌面"}, "explanation": "列出桌面目录内容", "risk_level": "low"}
 用户: "写一首诗保存到桌面" -> {"tool": "file_write", "args": {"path": "$HOME/桌面/poem.txt", "content": "春眠不觉晓，处处闻啼鸟。夜来风雨声，花落知多少。"}, "explanation": "创建诗歌文件", "risk_level": "low"}
 用户: "只显示文件名" -> {"tool": "shell", "args": {"command": "ls -1"}, "explanation": "仅列出文件名", "risk_level": "low"}
-用户: "代表什么意思" -> {"tool": "chat", "args": {"message": "详细解释之前输出结果的含义..."}, "explanation": "解释网络配置信息", "risk_level": "low"}"""
+用户: "代表什么意思" -> {"tool": "chat", "args": {"message": "结合上一次执行结果，详细解释每个字段的含义..."}, "explanation": "解释上一次输出结果", "risk_level": "low"}"""
 
     def __init__(self, api_key: str = "", api_base: str = "", model: str = "",
                  ssh_config: Dict[str, Any] = None, risk_level: str = "high"):
@@ -103,7 +105,16 @@ class LinuxAgent:
         if not self.connected:
             return "未连接到服务器", False
             
-        prompt = f"用户输入: {user_input}\n\n请分析意图并返回JSON格式的执行计划。"
+        context_info = ""
+        if self.conversation_context:
+            last_msgs = self.conversation_context[-4:]
+            context_info = "\n## 最近对话记录:\n"
+            for msg in last_msgs:
+                role = "用户" if msg["role"] == "user" else "助手"
+                content = msg["content"][:500]
+                context_info += f"{role}: {content}\n"
+            
+        prompt = f"{context_info}\n当前用户输入: {user_input}\n\n请分析意图并返回JSON格式的执行计划。"
         response = self.llm_client.chat_with_json_response(prompt)
         
         if not response:
