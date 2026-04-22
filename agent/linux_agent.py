@@ -101,9 +101,9 @@ class LinuxAgent:
         self.executor.disconnect()
         self.connected = False
         
-    def parse_and_execute(self, user_input: str) -> Tuple[str, bool]:
+    def parse_and_execute(self, user_input: str) -> Tuple[str, bool, str]:
         if not self.connected:
-            return "未连接到服务器", False
+            return "未连接到服务器", False, ""
             
         context_info = ""
         if self.conversation_context:
@@ -118,7 +118,7 @@ class LinuxAgent:
         response = self.llm_client.chat_with_json_response(prompt)
         
         if not response:
-            return "无法理解您的请求，请换种方式描述", False
+            return "无法理解您的请求，请换种方式描述", False, ""
             
         tool = response.get("tool", "")
         args = response.get("args", {})
@@ -127,139 +127,163 @@ class LinuxAgent:
         
         return self._execute_tool(tool, args, explanation, risk_level)
         
-    def _execute_tool(self, tool: str, args: Dict[str, Any], explanation: str, risk_level: str) -> Tuple[str, bool]:
+    def _execute_tool(self, tool: str, args: Dict[str, Any], explanation: str, risk_level: str) -> Tuple[str, bool, str]:
         if not self.tools:
-            return "工具未初始化", False
+            return "工具未初始化", False, tool
             
         try:
             if tool == "disk_info":
                 output = self.tools.get_disk_info()
-                return output, True
+                return output, True, tool
                 
             elif tool == "file_list":
                 path = args.get("path", ".")
                 path = self._expand_path(path)
                 success, output = self.tools.execute_custom_command(f"ls -la {path}")
                 if success:
-                    return f"目录 {path} 内容:\n{output}", True
-                return output, False
+                    return f"目录 {path} 内容:\n{output}", True, tool
+                return output, False, tool
                 
             elif tool == "file_list_simple":
                 path = args.get("path", ".")
                 path = self._expand_path(path)
                 success, output = self.tools.execute_custom_command(f"ls -1 {path}")
                 if success:
-                    return f"文件列表:\n{output}", True
-                return output, False
+                    return f"文件列表:\n{output}", True, tool
+                return output, False, tool
                 
             elif tool == "file_find":
                 pattern = args.get("pattern", "*")
                 path = self._expand_path(args.get("path", "/"))
                 files, error = self.tools.find_files(pattern, path)
                 if error:
-                    return f"搜索失败: {error}", False
-                return f"找到 {len(files)} 个匹配 '{pattern}' 的文件:\n" + "\n".join(f"  📄 {f}" for f in files[:20]), True
+                    return f"搜索失败: {error}", False, tool
+                return f"找到 {len(files)} 个匹配 '{pattern}' 的文件:\n" + "\n".join(f"  📄 {f}" for f in files[:20]), True, tool
                 
             elif tool == "file_read":
                 path = self._expand_path(args.get("path", ""))
                 success, output = self.tools.execute_custom_command(f"cat {path}")
                 if success:
-                    return f"文件内容:\n{output}", True
-                return output, False
+                    return f"文件内容:\n{output}", True, tool
+                return output, False, tool
                 
             elif tool == "file_write":
                 path = self._expand_path(args.get("path", ""))
                 content = args.get("content", "").replace("'", "'\"'\"'")
                 risk, warning = self.security.analyze_command(f"write {path}")
                 if risk in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
-                    return f"⚠️ 安全警告: {warning}", False
+                    return f"⚠️ 安全警告: {warning}", False, tool
                 success, output = self.tools.execute_custom_command(f'echo \'{content}\' | tee {path}')
                 if success:
-                    return f"✅ 文件已保存到 {path}", True
-                return f"写入失败: {output}", False
+                    return f"✅ 文件已保存到 {path}", True, tool
+                return f"写入失败: {output}", False, tool
                 
             elif tool == "process_list":
                 filter_name = args.get("filter", "")
                 if filter_name:
                     processes = self.tools.get_process_list(filter_name)
                     if processes and "error" in processes[0]:
-                        return f"查询进程失败: {processes[0].get('error', '未知错误')}", False
+                        return f"查询进程失败: {processes[0].get('error', '未知错误')}", False, tool
                     if not processes:
-                        return f"没有找到匹配 '{filter_name}' 的进程", True
+                        return f"没有找到匹配 '{filter_name}' 的进程", True, tool
                 else:
                     processes = self.tools.get_process_list()
                     if not processes or "error" in processes[0]:
-                        return "无法获取进程信息", False
+                        return "无法获取进程信息", False, tool
                 output = "进程列表:\n"
                 for p in processes[:15]:
                     output += f"  PID:{p.get('pid',''):>6} CPU:{p.get('cpu',''):>5}% MEM:{p.get('mem',''):>5}% {p.get('command','')[:40]}\n"
-                return output, True
+                return output, True, tool
                 
             elif tool == "process_kill":
                 pid = args.get("pid", "")
                 success, msg = self.tools.kill_process(pid)
-                return msg, success
+                return msg, success, tool
                 
             elif tool == "port_list":
                 ports = self.tools.get_port_list()
                 if not ports or "error" in ports[0]:
-                    return "无法获取端口信息", False
+                    return "无法获取端口信息", False, tool
                 output = "监听端口:\n"
                 for p in ports:
                     output += f"  🔌 {p.get('protocol','')} {p.get('address','')}:{p.get('port','')}\n"
-                return output, True
+                return output, True, tool
                 
             elif tool == "user_list":
                 output = self.tools.get_user_info()
-                return output, True
+                return output, True, tool
                 
             elif tool == "user_create":
                 username = args.get("username", "")
                 success, msg = self.tools.create_user(username)
-                return msg, success
+                return msg, success, tool
                 
             elif tool == "user_delete":
                 username = args.get("username", "")
                 success, msg = self.tools.delete_user(username)
-                return msg, success
+                return msg, success, tool
                 
             elif tool == "memory_info":
                 output = self.tools.get_memory_info()
-                return output, True
+                return output, True, tool
                 
             elif tool == "cpu_info":
                 output = self.tools.get_cpu_info()
-                return output, True
+                return output, True, tool
                 
             elif tool == "network_info":
                 output = self.tools.get_network_info()
-                return output, True
+                return output, True, tool
                 
             elif tool == "system_status":
                 output = self.tools.get_system_status()
-                return output, True
+                return output, True, tool
                 
             elif tool == "chat":
                 message = args.get("message", "")
-                return message, True
+                return message, True, tool
                 
             elif tool == "shell":
                 command = args.get("command", "")
                 risk, warning = self.security.analyze_command(command)
                 if risk == RiskLevel.CRITICAL:
-                    return f"⛔ 危险操作已阻止: {warning}", False
+                    return f"⛔ 危险操作已阻止: {warning}", False, tool
                 if risk == RiskLevel.HIGH:
-                    return f"⚠️ 高风险操作: {warning}\n如需执行，请直接输入命令", False
+                    return f"⚠️ 高风险操作: {warning}\n如需执行，请直接输入命令", False, tool
                 success, output = self.tools.execute_custom_command(command)
                 if success:
-                    return f"执行结果:\n{output}", True
-                return f"执行失败: {output}", False
+                    return f"执行结果:\n{output}", True, tool
+                return f"执行失败: {output}", False, tool
                 
             else:
-                return f"未知工具: {tool}", False
+                return f"未知工具: {tool}", False, tool
                 
         except Exception as e:
-            return f"执行错误: {str(e)}", False
+            return f"执行错误: {str(e)}", False, tool
+            
+    def _add_explanation(self, user_input: str, result: str, tool: str) -> str:
+        if tool == "chat":
+            return result
+            
+        explain_prompt = f"""用户请求: {user_input}
+执行工具: {tool}
+原始输出:
+{result}
+
+请用简洁友好的中文回复，包括：
+1. 简要说明执行了什么操作
+2. 解释输出结果的关键信息（如果输出较长，只解释重要部分）
+3. 如果发现问题或建议，可以提示用户
+
+直接返回解释内容，不要JSON格式。"""
+        
+        try:
+            explanation = self.llm_client.chat(explain_prompt)
+            if explanation:
+                return explanation
+        except:
+            pass
+        return result
             
     def _expand_path(self, path: str) -> str:
         if path.startswith("~") or "$HOME" in path:
@@ -278,7 +302,10 @@ class LinuxAgent:
         if not self.connected:
             return "❌ 未连接到服务器，请先建立连接"
             
-        result, success = self.parse_and_execute(user_input)
+        result, success, tool = self.parse_and_execute(user_input)
+        
+        if success and result:
+            result = self._add_explanation(user_input, result, tool)
         
         execution_time = time.time() - start_time
         status = "✅" if success else "❌"
